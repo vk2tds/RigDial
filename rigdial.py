@@ -1,18 +1,34 @@
-# hid==1.0.4
-# pyusb==1.0.2
-# NOTE: should install hidpai (brew/package manager)
-import hid
+#!/usr/bin/python3
+
+# rigdial.py
+#
+# Device driver for the Contour Xpress Multimedia Controller, to control an Icom IC-7300 HF radio
+# via Flrig using the XML-RPC interface. It also sends VFO frequency, split and mode to MacLoggerDX
+#
+# This code was developed for MacOS but should work under Windows and Linux
+
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public 
+# License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program. If not, 
+# see <https://www.gnu.org/licenses/>.
+
+# Having said that, it would be great to know if this software gets used. If you want, buy me a coffee, or send me some hardware
+# Darryl Smith, VK2TDS. darryl@radio-active.net.au Copyright 2023
+
+import hid                  # For some reason I needed to add the path to this library in my .zprofile 
 import binascii
 import pprint
 import time
 import sys
 import socket
-from threading import Thread
 import logging
 import logging.handlers
-from subprocess import Popen, PIPE
-
 import xmlrpc.client
+
+from subprocess import Popen, PIPE
+from threading import Thread
 
 # MAYBE, we can register a callback to be notified about device
 # add/remove (https://github.com/pyusb/pyusb/pull/160)
@@ -22,45 +38,18 @@ from usb import util
 
 
 
-
-
-def dec_to_hex(value):
-    return (format (value, '04x'))
-
-
-def str_to_int(value):
-    return int(value, base=16)
-
-
-def str_to_hex(value):
-    return hex(str_to_int(value))
-
-
-class find_class(object):
-    def __init__(self, class_):
-        self._class = class_
-
-    def __call__(self, device):
-        if device.bDeviceClass == self._class:
-            return True
-
-        for cfg in device:
-            intf = util.find_descriptor(cfg, bInterfaceClass=self._class)
-            if intf is not None:
-                return True
-
-        return False
-
-
-# some info can be gathered by:
-#   $ lsusb -v
-# or device specific:
-#   $ lsusb -d vid:pid -v
-
-
 class Wheel():
-    def __init__(self, supported_devices):
-        self.supported_devices = supported_devices
+
+    # some info can be gathered by:
+    #   $ lsusb -v
+    # or device specific:
+    #   $ lsusb -d vid:pid -v
+
+
+
+
+    def __init__(self):
+        #self.supported_devices = supported_devices
         self.devices_to_bind = {}
 
         self.shuttle_value = 0 
@@ -72,22 +61,38 @@ class Wheel():
         self.shuttle_callbacks = []
         self.button_callbacks = []
 
+        self.supported_devices = {
+            'Contour Design': {'vendor_id': '0b33',
+                    'devices': [
+                        {'name': 'ShuttleXpress',
+                        'product_id': '0020'}
+                        ]
+                    },
+            'Dummy': {'vendor_id': '0123',
+                            'devices': [
+                                {'name': 'Dummy Product',
+                                'product_id': 'fedb'}
+                            ]
+                            }
+        }
+
+
             # we can enumarate with vendor_id and product_id as well, useful after some
             # type of hotplug event
         for dev in hid.enumerate():
             manufacturer = dev.get('manufacturer_string')
             product = dev.get('product_string')
             if manufacturer in self.supported_devices:
-                for device in supported_devices[manufacturer]['devices']:
-                    vendor_id = str_to_int(
-                        supported_devices[manufacturer]['vendor_id'])
+                for device in self.supported_devices[manufacturer]['devices']:
+                    vendor_id = self.str_to_int(
+                        self.supported_devices[manufacturer]['vendor_id'])
 
                     if product == device['name'] and \
-                        dec_to_hex(dev.get('product_id')) == device['product_id']:
-                        product_id = str_to_int(device['product_id'])
+                        self.dec_to_hex(dev.get('product_id')) == device['product_id']:
+                        product_id = self.str_to_int(device['product_id'])
                         # 3 == hid, 1 == audio
                         usb_device = core.find(find_all=True,
-                                       custom_match=find_class(3),
+                                       custom_match=self.find_class(3),
                                        idVendor=vendor_id,
                                        idProduct=product_id)
 
@@ -140,6 +145,36 @@ class Wheel():
         if self.jog_callbacks is not None:
             for callback in self.jog_callbacks:
                 callback(self, value, delta_value, delta_time, velocity)
+
+
+
+    def dec_to_hex(self, value):
+        return (format (value, '04x'))
+
+
+    def str_to_int(self, value):
+        return int(value, base=16)
+
+
+    def str_to_hex(self, value):
+        return hex(str_to_int(value))
+
+
+    class find_class(object):
+        def __init__(self, class_):
+            self._class = class_
+
+        def __call__(self, device):
+            if device.bDeviceClass == self._class:
+                return True
+
+            for cfg in device:
+                intf = util.find_descriptor(cfg, bInterfaceClass=self._class)
+                if intf is not None:
+                    return True
+
+            return False
+
 
     # open a device and read it's data
     # on linux we can open hidraw directly; check if we can do it on macos as well
@@ -220,13 +255,10 @@ class Wheel():
 
                 velocity = (delta_value/delta_time) * 1000 * 3.5
 
-
-
                 self.jog (self.jog_value, delta_value, delta_time, velocity)
 
 
         d.close()
-
 
     def go(self):
         for d in self.devices_to_bind.keys():
@@ -390,20 +422,9 @@ class Telnet:
         self.inThread = False
         return r
 
-supported_devices = {
-    'Contour Design': {'vendor_id': '0b33',
-              'devices': [
-                  {'name': 'ShuttleXpress',
-                   'product_id': '0020'}
-                   ]
-              },
-    'GN Netcom A/S': {'vendor_id': '0b0e',
-                      'devices': [
-                          {'name': 'Jabra HANDSET 450',
-                           'product_id': '101b'}
-                      ]
-                      }
-}
+
+
+
 
 
 # Definitions for Keys
@@ -411,22 +432,18 @@ supported_devices = {
 # Button 1:
 #	Push and hold for PTT
 # Button 2:
-#	Push to toggle between bands, going up. Changes on release
-# 	1.8, 3.5, 7, 10, 14, 18, 21, 24, 28, 50
-#	If Jog whilst down, ???
 # Button 3:
 #	Push to toggle between minimum VFO change of 10 Hz or 1000 Hz
 # Button 4:
-#	Push and hold whilst jog Power
+#	Push and hold whilst jog Mic Gain
 # Button 5:
-#	Push and hold whilst jog Mic gain
+#	Push and hold whilst jog Power
 
 
 
 
-#minFrequencyChange = 1000
 
-minFreqChange = 1
+minFreqChange = 10
 
 def button(self, button_number, value):
     global minFreqChange
@@ -440,6 +457,8 @@ def button(self, button_number, value):
     if (button_number == 0) & (value == 1):
         log.debug ("PTT")
         t.ptt = 1
+    if (button_number == 0) & (value == 1):
+        log.debug ("Nothing happens")
     if (button_number == 2) & (value == 1):
         # Toggle the minimum frequency change between 10 and 1000, on button down
         if minFreqChange == 1000:
@@ -449,9 +468,9 @@ def button(self, button_number, value):
         log.info ("Minimum frequency change is now %d" % (minFreqChange))
         #t.send(b"+t\n")
     if (button_number == 3):
-        log.debug ("Button index 3 is controlled by JOG")
+        log.debug ("Button index 3 is controlled by JOG - Mic Gain")
     if (button_number == 4):
-        log.debug ("Button index 4 is controlled by JOG")
+        log.debug ("Button index 4 is controlled by JOG - Power")
         
 
 
@@ -474,15 +493,15 @@ def jog (self, value, delta_value, delta_time, velocity):
     
     # Assuming NO BUTTONS ARE PRESSED!!!
     vfo = t.vfo
-    mult = 1
+    mult = 1.0
     if abs(velocity) < 30:
-        mult = 1
+        mult = 1.0
     elif abs(velocity) < 60:
-        mult = 4
+        mult = 4.0
     elif abs(velocity) < 90:
-        mult = 9
+        mult = 9.0
     else:
-        mult = 15
+        mult = 15.0
     vfo = vfo + ( minFreqChange * delta_value * mult)
     log.info ("Setting new VFO frequency %f" % (vfo))
     t.vfo = vfo
@@ -500,18 +519,10 @@ class rigctldFake:
       self.vfo = "10.151"
       self.mode = "USB-D"
       self.split = "5"
+      self.taint = True     # When this is True
       
 
     def MacLoggerDX (self):
-      #b'tell application "MacLoggerDX"\n"setVFOandMode "28.074 USB-D"\nsetSplitKhz "1"\nend tell\n'
-      #scpt = b'''
-      #tell application "MacLoggerDX"
-  #	setVFOandMode "18.130 USB"
-  #	setSplitKhz "5"
-   #   end tell
-    #  '''
-
-
       v = self.vfo/1000000
       scpt = b'tell application "MacLoggerDX"\n'
       scpt = scpt + (b'setVFOandMode "%s %s"\n') % (bytes(str(v),  encoding='utf-8'), bytes(self.mode,  encoding='utf-8'))
@@ -533,38 +544,41 @@ class rigctldFake:
         with conn:
           print(f"Connected by {addr}")
           while True:
-              data = conn.recv(1024)
-              self.MacLoggerDX()
+                data = conn.recv(1024)
+                if self.taint:
+                    self.taint = False
+                    self.MacLoggerDX() # Send to MacLoggerDX whenever we get a tickle from MacLoggerDX
       
 
-
-      
-      
-      
       
       
     def go(self):
       Thread (target=self.listen).start()
-      
       True
     
     
     
-    
-    
 
 
 
 
+def get_vfo(r, t):
+    temp = t.vfo
+    if r.vfo != temp:
+        r.vfo = temp
+        r.taint = True
+    temp = t.mode
+    if r.mode != temp:
+        r.mode = temp
+        r.taint = True
+    temp = t.split
+    if t.split != temp:
+        r.split = temp
+        r.taint = True
+ 
 
 
-
-
-
-
-
-
-
+MacLoggerDX = True
 
 
 
@@ -591,33 +605,26 @@ if __name__ == "__main__":
 
 
 
-    w = Wheel (supported_devices)
+    w = Wheel ()
     w.on_button (button)
     w.on_shuttle (shuttle)
     w.on_jog (jog)
-
-
-
     w.go()
     
-    r = rigctldFake ("127.0.0.1", 4532)
-    r.go()
-    
+    if MacLoggerDX:
+        # Only create the fake rigctld if we are running MacLoggerDX
+        r = rigctldFake ("127.0.0.1", 4532)
+        r.go()
 
 
     log.info ("Starting")
     t = Telnet ('127.0.0.1', 12345)
     t.connect()
-    #t.go()
     
 
 
-
-
-
     while 1==1:
-        r.vfo = t.vfo
-        r.mode = t.mode
-        r.split = t.split
+        if MacLoggerDX:
+            get_vfo(r, t) # Only poll the VFO on the radio if we are connected to MacLoggerDX
         time.sleep (1)        
         
