@@ -36,17 +36,8 @@ from usb import core
 from usb import util
 
 
-
-
 class Wheel():
-
-    # some info can be gathered by:
-    #   $ lsusb -v
-    # or device specific:
-    #   $ lsusb -d vid:pid -v
-
-
-
+    # This class will do callbacks when data is receieved.
 
     def __init__(self):
         #self.supported_devices = supported_devices
@@ -61,7 +52,11 @@ class Wheel():
         self.shuttle_callbacks = []
         self.button_callbacks = []
 
-        self.supported_devices = {
+        # some info can be gathered by:
+        #   $ lsusb -v
+        # or device specific:
+        #   $ lsusb -d vid:pid -v
+        self.supported_devices = { # Two lines to show how to add another one later for other models
             'Contour Design': {'vendor_id': '0b33',
                     'devices': [
                         {'name': 'ShuttleXpress',
@@ -147,18 +142,14 @@ class Wheel():
                 callback(self, value, delta_value, delta_time, velocity)
 
 
-
     def dec_to_hex(self, value):
         return (format (value, '04x'))
-
 
     def str_to_int(self, value):
         return int(value, base=16)
 
-
     def str_to_hex(self, value):
         return hex(str_to_int(value))
-
 
     class find_class(object):
         def __init__(self, class_):
@@ -269,6 +260,7 @@ class Wheel():
 
 
 class Telnet:
+    #TODO: Rename Telnet to something more appropriate
 
     def __init__(self, endpoint, port):
         self.endpoint = endpoint
@@ -280,28 +272,18 @@ class Telnet:
 
 
     def connect (self):
-
-        #self.s = xmlrpc.client.ServerProxy((self.endpoint, self.port))
         self.s = xmlrpc.client.ServerProxy('http://127.0.0.1:12345')
-                
         self.connected = True
-        log.info ("Connected")
-        #self.send(b'+f\n')
-        #Thread (target=self.loop).start()
+        log.info ("XML-RPC Connected")
 
 
+    #TODO: Look at this
     def loop (self):
-        #while True:
-        #    #with self.s:
-        #        data = self.s.recv(1024)
-        #        log.debug (f"Received {data!r}")
         True
         
-        
+    #TODO: Look at this    
     def go(self):
-        #Thread (target=self.connect).start()
         True
-
 
     @property
     def vfo (self):
@@ -424,20 +406,68 @@ class Telnet:
 
 
 
+class rigctldFake:
+
+    def __init__(self, endpoint, port):
+      self.endpoint = endpoint
+      self.port = port
+      self.vfo = "5"
+      self.mode = "USB-D"
+      self.split = "5"
+      self.taint = True     # When this is True
+      
+
+    def MacLoggerDX (self):
+      v = self.vfo/1000000
+      scpt = b'tell application "MacLoggerDX"\n'
+      scpt = scpt + (b'setVFOandMode "%s %s"\n') % (bytes(str(v),  encoding='utf-8'), bytes(self.mode,  encoding='utf-8'))
+      scpt = scpt + (b'setSplitKhz "%s"\n') % (bytes(str(self.split),  encoding='utf-8'))
+      scpt = scpt + b'end tell\n'
 
 
+      p = Popen(['osascript'] , stdin=PIPE, stdout=PIPE, stderr=PIPE)
+      stdout, stderr = p.communicate(scpt)
+      #print (p.returncode, stdout, stderr)
 
-# Definitions for Keys
-#
-# Button 1:
-#	Push and hold for PTT
-# Button 2:
-# Button 3:
-#	Push to toggle between minimum VFO change of 10 Hz or 1000 Hz
-# Button 4:
-#	Push and hold whilst jog Mic Gain
-# Button 5:
-#	Push and hold whilst jog Power
+      
+      
+    def listen(self):
+      with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((self.endpoint, self.port))
+        s.listen()
+        conn, addr = s.accept()
+        with conn:
+          print(f"Connected by {addr}")
+          while True:
+                data = conn.recv(1024)
+                if self.taint:
+                    self.taint = False
+                    self.MacLoggerDX() # Send to MacLoggerDX whenever we get a tickle from MacLoggerDX
+      
+
+      
+      
+    def go(self):
+      Thread (target=self.listen).start()
+      True
+
+
+def get_vfo(r, t):
+    temp = t.vfo
+    if r.vfo != temp:
+        r.vfo = temp
+        r.taint = True
+    temp = t.mode
+    if r.mode != temp:
+        r.mode = temp
+        r.taint = True
+    temp = t.split
+    if t.split != temp:
+        r.split = temp
+        r.taint = True
+ 
+
+
 
 
 
@@ -490,7 +520,8 @@ def jog (self, value, delta_value, delta_time, velocity):
         log.info ("Setting Mic Gain %f" % (mic_gain))
         mic_gain = mic_gain + delta_value
         t.mic_gain = mic_gain 
-    
+        return
+
     # Assuming NO BUTTONS ARE PRESSED!!!
     vfo = t.vfo
     mult = 1.0
@@ -507,75 +538,6 @@ def jog (self, value, delta_value, delta_time, velocity):
     t.vfo = vfo
 
 
-
-
-
-
-class rigctldFake:
-
-    def __init__(self, endpoint, port):
-      self.endpoint = endpoint
-      self.port = port
-      self.vfo = "10.151"
-      self.mode = "USB-D"
-      self.split = "5"
-      self.taint = True     # When this is True
-      
-
-    def MacLoggerDX (self):
-      v = self.vfo/1000000
-      scpt = b'tell application "MacLoggerDX"\n'
-      scpt = scpt + (b'setVFOandMode "%s %s"\n') % (bytes(str(v),  encoding='utf-8'), bytes(self.mode,  encoding='utf-8'))
-      scpt = scpt + (b'setSplitKhz "%s"\n') % (bytes(str(self.split),  encoding='utf-8'))
-      scpt = scpt + b'end tell\n'
-
-
-      p = Popen(['osascript'] , stdin=PIPE, stdout=PIPE, stderr=PIPE)
-      stdout, stderr = p.communicate(scpt)
-      #print (p.returncode, stdout, stderr)
-
-      
-      
-    def listen(self):
-      with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((self.endpoint, self.port))
-        s.listen()
-        conn, addr = s.accept()
-        with conn:
-          print(f"Connected by {addr}")
-          while True:
-                data = conn.recv(1024)
-                if self.taint:
-                    self.taint = False
-                    self.MacLoggerDX() # Send to MacLoggerDX whenever we get a tickle from MacLoggerDX
-      
-
-      
-      
-    def go(self):
-      Thread (target=self.listen).start()
-      True
-    
-    
-    
-
-
-
-
-def get_vfo(r, t):
-    temp = t.vfo
-    if r.vfo != temp:
-        r.vfo = temp
-        r.taint = True
-    temp = t.mode
-    if r.mode != temp:
-        r.mode = temp
-        r.taint = True
-    temp = t.split
-    if t.split != temp:
-        r.split = temp
-        r.taint = True
- 
 
 
 MacLoggerDX = True
@@ -595,6 +557,15 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(console)
 
     log = logging.getLogger("app." + __name__)
+
+    log.info ("Jog: Change VFO Frequency. Push Button 4 or 5 and whilst turning to adjust Mic Gain and Power")
+    log.info ("Shuttle: Unused")
+    log.info ("Button 1: Push and hold for PTT")
+    log.info ("Button 2: Unused")
+    log.info ("Button 3: Toggle between 10Hz and 1000Hz minimum VFO changes on Jog")
+    log.info ("Button 4: Push whilst Jog to adjust Mic Gain")
+    log.info ("Button 5: Push whilst Jog to adjust Power")
+#
 
     #log.debug('Debug message, should only appear in the file.')
     #log.info('Info message, should appear in file and stdout.')
