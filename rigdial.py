@@ -414,20 +414,8 @@ class rigctldFake:
       self.vfo = "5"
       self.mode = "USB-D"
       self.split = "5"
-      self.taint = True     # When this is True
+      self.taint = True     # When this is True we need to send updated VFO to MacLoggerDX. No longer used
       
-
-    def MacLoggerDX (self):
-      v = self.vfo/1000000
-      scpt = b'tell application "MacLoggerDX"\n'
-      scpt = scpt + (b'setVFOandMode "%s %s"\n') % (bytes(str(v),  encoding='utf-8'), bytes(self.mode,  encoding='utf-8'))
-      scpt = scpt + (b'setSplitKhz "%s"\n') % (bytes(str(self.split),  encoding='utf-8'))
-      scpt = scpt + b'end tell\n'
-
-
-      p = Popen(['osascript'] , stdin=PIPE, stdout=PIPE, stderr=PIPE)
-      stdout, stderr = p.communicate(scpt)
-      #print (p.returncode, stdout, stderr)
 
       
       
@@ -440,19 +428,22 @@ class rigctldFake:
           print(f"Connected by {addr}")
           while True:
                 data = conn.recv(1024)
-                if self.taint:
-                    self.taint = False
-                    self.MacLoggerDX() # Send to MacLoggerDX whenever we get a tickle from MacLoggerDX
-      
+                #receieve     b'+\\get_vfo_info VFOB\n'
+                #send b'get_vfo_info: VFOA\nFreq: 28074000\nMode: PKTUSB\nWidth: 3000\nSplit: 0\nSatMode: 0\nRPRT 0\n'
+                if data == b'+\\get_vfo_info VFOB\n':
+                    direct = b'get_vfo_info: VFOA\nFreq: %s\nMode: %s\nSplit: %s\nRPRT 0\n' % ( \
+                        bytes(str(self.vfo),  encoding='utf-8'), \
+                        bytes(self.mode,  encoding='utf-8'), \
+                        bytes(str(self.split),  encoding='utf-8'))
+                    conn.sendall (direct)
 
-      
-      
     def go(self):
       Thread (target=self.listen).start()
       True
 
 
 def get_vfo(r, t):
+    # We no longer use r.taint, but set it just in case
     temp = t.vfo
     if r.vfo != temp:
         r.vfo = temp
