@@ -407,6 +407,11 @@ class Telnet:
 
 
 class rigctldFake:
+    # This class is implements a very minor subset of the HamLib TCP server. It only implements a single HamLib command,
+    # and even then, only returns some of the information that would normally be supplied by the server. Specifically, the
+    # server accepts the 'get_vfo_info VFOA' command, with specific spacing and linefeed. It returns the current VFO 
+    # frequency, mode and split. These parameters are injected into the class from outside - generally by polling the 
+    # Fldigi server. 
 
     def __init__(self, endpoint, port):
       self.endpoint = endpoint
@@ -415,9 +420,6 @@ class rigctldFake:
       self.mode = "USB-D"
       self.split = "5"
       self.taint = True     # When this is True we need to send updated VFO to MacLoggerDX. No longer used
-      
-
-      
       
     def listen(self):
       with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -428,10 +430,10 @@ class rigctldFake:
           print(f"Connected by {addr}")
           while True:
                 data = conn.recv(1024)
-                #receieve     b'+\\get_vfo_info VFOB\n'
+                #receieve     b'+\\get_vfo_info VFOA\n'
                 #send b'get_vfo_info: VFOA\nFreq: 28074000\nMode: PKTUSB\nWidth: 3000\nSplit: 0\nSatMode: 0\nRPRT 0\n'
                 if data == b'+\\get_vfo_info VFOB\n':
-                    direct = b'get_vfo_info: VFOA\nFreq: %s\nMode: %s\nSplit: %s\nRPRT 0\n' % ( \
+                    direct = b'get_vfo_info: VFOA\nFreq: %s\nMode: %s\nSplit: %s\n' % ( \
                         bytes(str(self.vfo),  encoding='utf-8'), \
                         bytes(self.mode,  encoding='utf-8'), \
                         bytes(str(self.split),  encoding='utf-8'))
@@ -443,6 +445,7 @@ class rigctldFake:
 
 
 def get_vfo(r, t):
+    # Take the 'telnet' radio settings and send them to the 'rigctldFake' class. 
     # We no longer use r.taint, but set it just in case
     temp = t.vfo
     if r.vfo != temp:
@@ -464,10 +467,10 @@ def get_vfo(r, t):
 
 
 
-minFreqChange = 10
+
 
 def button(self, button_number, value):
-    global minFreqChange
+    
     # This handler is ONLY when button presses are used without the JOG or SHUTTLE wheel
     #
     log.info ("Event Button %d state %d" % (button_number, value))
@@ -482,11 +485,11 @@ def button(self, button_number, value):
         log.debug ("Nothing happens")
     if (button_number == 2) & (value == 1):
         # Toggle the minimum frequency change between 10 and 1000, on button down
-        if minFreqChange == 1000:
-            minFreqChange = 10
+        if settings.minFreqChange == 1000:
+            settings.minFreqChange = 10
         else:
-            minFreqChange = 1000
-        log.info ("Minimum frequency change is now %d" % (minFreqChange))
+            settings.minFreqChange = 1000
+        log.info ("Minimum frequency change is now %d" % (settings.minFreqChange))
         #t.send(b"+t\n")
     if (button_number == 3):
         log.debug ("Button index 3 is controlled by JOG - Mic Gain")
@@ -524,18 +527,25 @@ def jog (self, value, delta_value, delta_time, velocity):
         mult = 9.0
     else:
         mult = 15.0
-    vfo = vfo + ( minFreqChange * delta_value * mult)
+    vfo = vfo + ( settings.minFreqChange * delta_value * mult)
     log.info ("Setting new VFO frequency %f" % (vfo))
     t.vfo = vfo
 
 
 
 
-MacLoggerDX = True
-
-
+class Settings:
+    def __init__(self):
+        self.MacLoggerDX = True
+        self.HamLibIncomingHost = '127.0.0.1'
+        self.HamLibIncomingPort = 4532
+        self.FlrigDestHost = '127.0.0.1'
+        self.FlrigDestPort = 12345
+        self.minFreqChange = 10
 
 if __name__ == "__main__":
+
+    settings = Settings()
 
     # Change root logger level from WARNING (default) to NOTSET in order for all messages to be delegated.
     logging.getLogger().setLevel(logging.NOTSET)
@@ -573,20 +583,20 @@ if __name__ == "__main__":
     w.on_jog (jog)
     w.go()
     
-    if MacLoggerDX:
+    if settings.MacLoggerDX:
         # Only create the fake rigctld if we are running MacLoggerDX
-        r = rigctldFake ("127.0.0.1", 4532)
+        r = rigctldFake (settings.HamLibIncomingHost, settings.HamLibIncomingPort)
         r.go()
 
 
     log.info ("Starting")
-    t = Telnet ('127.0.0.1', 12345)
+    t = Telnet (settings.FlrigDestHost, settings.FlrigDestPort)
     t.connect()
     
 
 
     while 1==1:
-        if MacLoggerDX:
+        if settings.MacLoggerDX:
             get_vfo(r, t) # Only poll the VFO on the radio if we are connected to MacLoggerDX
         time.sleep (1)        
         

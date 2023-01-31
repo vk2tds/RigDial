@@ -37,4 +37,5 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.sendall(b'+\\get_vfo_info VFOA\n')
     data = s.recv(1024)
 
+#Received b'get_vfo_info: VFOA\nFreq: 28074000\nMode: PKTUSB\nWidth: 3000\nSplit: 0\nSatMode: 0\nRPRT 0\n'
 print(f"Received {data!r}")
