@@ -432,8 +432,8 @@ class rigctldFake:
                 data = conn.recv(1024)
                 #receieve     b'+\\get_vfo_info VFOA\n'
                 #send b'get_vfo_info: VFOA\nFreq: 28074000\nMode: PKTUSB\nWidth: 3000\nSplit: 0\nSatMode: 0\nRPRT 0\n'
-                if data == b'+\\get_vfo_info VFOB\n':
-                    direct = b'get_vfo_info: VFOA\nFreq: %s\nMode: %s\nSplit: %s\n' % ( \
+                if data == b'+\\get_vfo_info VFOA\n':
+                    direct = b'get_vfo_info: VFOA\nFreq: %s\nMode: %s\nSplit: %s\nRPRT 0\n' % ( \
                         bytes(str(self.vfo),  encoding='utf-8'), \
                         bytes(self.mode,  encoding='utf-8'), \
                         bytes(str(self.split),  encoding='utf-8'))
@@ -476,19 +476,19 @@ def button(self, button_number, value):
     log.info ("Event Button %d state %d" % (button_number, value))
     # Voice PTT whilst button 0 is pressed.
     if (button_number == 0) & (value == 0):
-        log.debug ("PTT")
+        log.debug ("PTT Off")
         t.ptt = 0
     if (button_number == 0) & (value == 1):
-        log.debug ("PTT")
+        log.debug ("PTT On")
         t.ptt = 1
     if (button_number == 0) & (value == 1):
         log.debug ("Nothing happens")
     if (button_number == 2) & (value == 1):
         # Toggle the minimum frequency change between 10 and 1000, on button down
-        if settings.minFreqChange == 1000:
-            settings.minFreqChange = 10
+        if settings.minFreqChange == settings.freqChangeBig:
+            settings.minFreqChange = settings.freqChangeSmall
         else:
-            settings.minFreqChange = 1000
+            settings.minFreqChange = settings.freqChangeBig
         log.info ("Minimum frequency change is now %d" % (settings.minFreqChange))
         #t.send(b"+t\n")
     if (button_number == 3):
@@ -518,6 +518,7 @@ def jog (self, value, delta_value, delta_time, velocity):
 
     # Assuming NO BUTTONS ARE PRESSED!!!
     vfo = t.vfo
+    # Depending on how fast the Jog Wheel is moving, we use a multiplier to make the frequency change bigger. 
     mult = 1.0
     if abs(velocity) < 30:
         mult = 1.0
@@ -541,7 +542,9 @@ class Settings:
         self.HamLibIncomingPort = 4532
         self.FlrigDestHost = '127.0.0.1'
         self.FlrigDestPort = 12345
-        self.minFreqChange = 10
+        self.freqChangeSmall = 10
+        self.freqChangeBig = 1000
+        self.minFreqChange = self.freqChangeSmall
 
 if __name__ == "__main__":
 
