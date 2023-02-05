@@ -420,16 +420,12 @@ class rigctldFake:
       self.mode = "USB-D"
       self.split = "5"
       self.taint = True     # When this is True we need to send updated VFO to MacLoggerDX. No longer used
-      
-    def listen(self):
-      with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((self.endpoint, self.port))
-        s.listen()
-        conn, addr = s.accept()
-        with conn:
-          print(f"Connected by {addr}")
-          while True:
-                data = conn.recv(1024)
+
+
+    def on_new_client(self, clientsocket, addr):
+        while True:
+            try:
+                data = clientsocket.recv(1024)
                 #receieve     b'+\\get_vfo_info VFOA\n'
                 #send b'get_vfo_info: VFOA\nFreq: 28074000\nMode: PKTUSB\nWidth: 3000\nSplit: 0\nSatMode: 0\nRPRT 0\n'
                 if data == b'+\\get_vfo_info VFOA\n':
@@ -437,7 +433,23 @@ class rigctldFake:
                         bytes(str(self.vfo),  encoding='utf-8'), \
                         bytes(self.mode,  encoding='utf-8'), \
                         bytes(str(self.split),  encoding='utf-8'))
-                    conn.sendall (direct)
+                    clientsocket.sendall (direct)
+            except socket.error as exc:
+                log.info( "Caught exception socket.error : %s" % (exc))
+        clientsocket.close()
+
+        
+
+    def listen(self):
+        self.s = socket.socket()
+        self.s.bind((self.endpoint, self.port))
+        self.s.listen (10) # I have a number here to hopefully stop Connection Reset By Peer errors. https://stackoverflow.com/questions/64412521/connection-reset-by-peer-in-python-when-socket-listen-backlog-is-small
+        while True:
+            c, addr = self.s.accept()
+            Thread (target=self.on_new_client, args=(c, addr) ).start()
+            #thread.start_new_thread (self.on_new_client, (c, addr))
+        self.s.close
+
 
     def go(self):
       Thread (target=self.listen).start()
