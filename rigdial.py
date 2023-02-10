@@ -36,6 +36,45 @@ from usb import core
 from usb import util
 
 
+class Freq():
+    def __init__(self):
+
+        self.freq = {"160M": 1840000,
+                "80M": 3573000,
+                "40M": 7074000,
+                "30M": 10136000,
+                "20M": 14074000,
+                "17M": 18100000,
+                "15M": 21074000,
+                "12M": 24915000,
+                "10M": 28075000,
+                "6M": 50313000}
+
+        self.freq_order = ["160M", "80M", "40M", "20M", "17M", "15M", "12M", "10M", "6M"]
+
+    def getBand(self, f):
+        if f < 2 * 1000000:
+            return ("160M")
+        if f < 4 * 1000000:
+            return ("80M")
+        if f < 8 * 1000000:
+            return ("40M")
+        if f < 12 * 1000000:
+            return ("30M")
+        if f < 16 * 1000000:
+            return ("20M")
+        if f < 19 * 1000000:
+            return ("17M") 
+        if f < 23 * 1000000:
+            return ("15M")
+        if f < 26 * 1000000:
+            return ("12M")
+        if f < 30 * 1000000:
+            return ("10M")
+        return ("6M")       
+
+
+
 class Wheel():
     # This class will do callbacks when data is receieved.
 
@@ -404,6 +443,23 @@ class Telnet:
         self.inThread = False
         return r
 
+    @property
+    def split (self):
+        while self.inThread:
+          True
+        self.inThread = True
+        r = float(self.s.rig.get_split())
+        self.inThread = False
+        return r
+        
+    @split.setter
+    def split(self, s):
+        while self.inThread:
+          True
+        self.inThread = True
+        r = self.s.rig.set_verify_split(int(s))
+        self.inThread = False
+        return r
 
 
 class rigctldFake:
@@ -472,7 +528,10 @@ def get_vfo(r, t):
         r.split = temp
         r.taint = True
  
-
+    if r.taint:
+        # save the frequency for this band in a variable 
+        band = f.getBand(r.vfo)
+        f.freq [band] = r.vfo
 
 
 
@@ -509,10 +568,32 @@ def button(self, button_number, value):
         log.debug ("Button index 4 is controlled by JOG - Power")
         
 
-
+maxShuttle = 0
+direction = 0
 def shuttle(self, value):
+    global maxShuttle
+    global direction
     log.info ("Event Shuttle value %d" %(value))
+
+    if value == 0:
+        if maxShuttle < 0:
+            direction = -1
+        else:
+            direction = 1
+        maxShuttle = 0
+        currentF = t.vfo
+        currentBand = f.getBand (currentF)
         
+        index = f.freq_order.index (currentBand)
+        newBand = f.freq_order[(index + direction) % len(f.freq_order)]
+        log.info ("New Band - %s" % (newBand))
+        t.vfo = f.freq[newBand]
+        t.split = 0
+
+    if abs(value) > abs(maxShuttle):
+        maxShuttle = value       
+
+
 def jog (self, value, delta_value, delta_time, velocity):
     log.info ("Event Jog Value %d Delta Value %d Delta Time %d Velocity %d" % (value, delta_value, delta_time, velocity))
     if w.buttons[3]:
@@ -561,6 +642,7 @@ class Settings:
 if __name__ == "__main__":
 
     settings = Settings()
+    f = Freq()
 
     # Change root logger level from WARNING (default) to NOTSET in order for all messages to be delegated.
     logging.getLogger().setLevel(logging.NOTSET)
