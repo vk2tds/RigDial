@@ -50,7 +50,7 @@ class Freq():
                 "10M": 28075000,
                 "6M": 50313000}
 
-        self.freq_order = ["160M", "80M", "40M", "20M", "17M", "15M", "12M", "10M", "6M"]
+        self.freq_order = ["160M", "80M", "40M", "30M", "20M", "17M", "15M", "12M", "10M", "6M"]
 
     def getBand(self, f):
         if f < 2 * 1000000:
