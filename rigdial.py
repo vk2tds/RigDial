@@ -39,6 +39,7 @@ from usb import util
 class Freq():
     def __init__(self):
 
+        # These frequencies are defaults. Really need to save them to NVRAM periodically
         self.freq = {"160M": 1840000,
                 "80M": 3573000,
                 "40M": 7074000,
@@ -50,9 +51,11 @@ class Freq():
                 "10M": 28075000,
                 "6M": 50313000}
 
-        self.freq_order = ["160M", "80M", "40M", "30M", "20M", "17M", "15M", "12M", "10M", "6M"]
+        # Assuming HF
+        self.band_order = ["160M", "80M", "40M", "30M", "20M", "17M", "15M", "12M", "10M", "6M"]
 
     def getBand(self, f):
+        # Choose band based on frequency
         if f < 2 * 1000000:
             return ("160M")
         if f < 4 * 1000000:
@@ -298,7 +301,7 @@ class Wheel():
 
 
 
-class Telnet:
+class TellFlrig:
     #TODO: Rename Telnet to something more appropriate
 
     def __init__(self, endpoint, port):
@@ -533,9 +536,7 @@ def get_vfo(r, t):
         band = f.getBand(r.vfo)
         f.freq [band] = r.vfo
 
-
-
-
+    # NOTE: these values are used elsewhere too. Dont think that the r.taint conditional was the only use
 
 
 
@@ -571,11 +572,17 @@ def button(self, button_number, value):
 maxShuttle = 0
 direction = 0
 def shuttle(self, value):
+    # This routine uses the shuttle. When you turn it a bit and return to zero, the band changes up and down
+    # It changes to the last known frequency on that band. It resets any split too
+
     global maxShuttle
     global direction
+    global f # Doesnt need to be a global, but makes it plain
+    global t # Doesnt need to be a global, but makes it plain
+
     log.info ("Event Shuttle value %d" %(value))
 
-    if value == 0:
+    if value == 0: # Do something on return to zero. 
         if maxShuttle < 0:
             direction = -1
         else:
@@ -584,14 +591,15 @@ def shuttle(self, value):
         currentF = t.vfo
         currentBand = f.getBand (currentF)
         
-        index = f.freq_order.index (currentBand)
-        newBand = f.freq_order[(index + direction) % len(f.freq_order)]
+        index = f.band_order.index (currentBand) 
+        newBand = f.band_order[(index + direction) % len(f.band_order)] # determine the new band
         log.info ("New Band - %s" % (newBand))
-        t.vfo = f.freq[newBand]
-        t.split = 0
+        t.vfo = f.freq[newBand] # Set new frequency
+        t.split = 0 # reset the split too. Turn it off
 
-    if abs(value) > abs(maxShuttle):
-        maxShuttle = value       
+    if abs(value) > 1: # Make sure that the user turns a bit. Without this line, letting go once turned sometimes goes the other way
+        if abs(value) > abs(maxShuttle):
+            maxShuttle = value       
 
 
 def jog (self, value, delta_value, delta_time, velocity):
@@ -638,6 +646,7 @@ class Settings:
         self.freqChangeSmall = 10
         self.freqChangeBig = 1000
         self.minFreqChange = self.freqChangeSmall
+        #TODO Also need to manage Freq.freq[] in settings at some stage.
 
 if __name__ == "__main__":
 
@@ -659,7 +668,7 @@ if __name__ == "__main__":
     log.info ("Jog: Change VFO Frequency. Push Button 4 or 5 and whilst turning to adjust Mic Gain and Power")
     log.info ("Shuttle: Unused")
     log.info ("Button 1: Push and hold for PTT")
-    log.info ("Button 2: Unused")
+    log.info ("Button 2: Turn and return to zero to change band up and down")
     log.info ("Button 3: Toggle between 10Hz and 1000Hz minimum VFO changes on Jog")
     log.info ("Button 4: Push whilst Jog to adjust Mic Gain")
     log.info ("Button 5: Push whilst Jog to adjust Power")
@@ -669,9 +678,6 @@ if __name__ == "__main__":
     #log.info('Info message, should appear in file and stdout.')
     #log.warning('Warning message, should appear in file and stdout.')
     #log.error('Error message, should appear in file and stdout.')
-
-
-
 
 
     w = Wheel ()
@@ -687,7 +693,7 @@ if __name__ == "__main__":
 
 
     log.info ("Starting")
-    t = Telnet (settings.FlrigDestHost, settings.FlrigDestPort)
+    t = TellFlrig (settings.FlrigDestHost, settings.FlrigDestPort)
     t.connect()
     
 
