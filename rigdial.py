@@ -30,6 +30,8 @@ import xmlrpc.client
 from subprocess import Popen, PIPE
 from threading import Thread
 
+#pip3 install pyusb
+
 # MAYBE, we can register a callback to be notified about device
 # add/remove (https://github.com/pyusb/pyusb/pull/160)
 from usb import core
@@ -51,8 +53,10 @@ class Freq():
                 "10M": 28075000,
                 "6M": 50313000}
 
+
         # Assuming HF
         self.band_order = ["160M", "80M", "40M", "30M", "20M", "17M", "15M", "12M", "10M", "6M"]
+
 
     def getBand(self, f):
         # Choose band based on frequency
@@ -113,7 +117,7 @@ class Wheel():
                             }
         }
 
-
+        usb_device = None
             # we can enumarate with vendor_id and product_id as well, useful after some
             # type of hotplug event
         for dev in hid.enumerate():
@@ -123,7 +127,7 @@ class Wheel():
                 for device in self.supported_devices[manufacturer]['devices']:
                     vendor_id = self.str_to_int(
                         self.supported_devices[manufacturer]['vendor_id'])
-
+                    print (device)
                     if product == device['name'] and \
                         self.dec_to_hex(dev.get('product_id')) == device['product_id']:
                         product_id = self.str_to_int(device['product_id'])
@@ -135,6 +139,10 @@ class Wheel():
 
                     # differentiate two devices with same vid:pid: u.bus, u.address
                     # https://github.com/pyusb/pyusb/blob/master/docs/tutorial.rst#dealing-with-multiple-identical-devices:
+                    if usb_device is None:
+                        # need more here
+                        log.info ("No device found - If the Shuttle driver is installed, make sure it is NOT active")
+                        return
                     usb_device = [x for x in usb_device][0]
 
                     # bInterfaceProtocol 0 (0 == None, 1 == Keyboard, 2 == Mouse)
