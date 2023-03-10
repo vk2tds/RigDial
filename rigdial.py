@@ -487,7 +487,7 @@ class rigctldFake:
       self.mode = "USB-D"
       self.split = "5"
       self.taint = True     # When this is True we need to send updated VFO to MacLoggerDX. No longer used
-
+      log.info ("Starting RigCtlD Listener")
 
     def on_new_client(self, clientsocket, addr):
         while True:
