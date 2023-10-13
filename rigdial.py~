@@ -620,6 +620,8 @@ def shuttle(self, value):
         #print (list(f.freq.keys())[1])
         #newBand = f.freq[list(f.freq.keys())[(memoryIndex)]]
         newF = list(f.freq.keys())[(memoryIndex)]
+        print (f.freq)
+        print (list(f.freq.keys()))
         log.info ("New Band - %s %s %s" % (memoryIndex, newF, f.freq[newF]))
         t.vfo = f.freq[newF] # Set new frequency
         t.split = 0 # reset the split too. Turn it off
